@@ -2,6 +2,8 @@ package dev.lordfetznschaedl.businesslogic.modules;
 
 import dev.lordfetznschaedl.businesslogic.entitystate.Entity;
 import dev.lordfetznschaedl.businesslogic.gameevents.RawGameEvent;
+import dev.lordfetznschaedl.entities.MatchHalf;
+import dev.lordfetznschaedl.entities.Player;
 import dev.lordfetznschaedl.entities.Round;
 import dev.lordfetznschaedl.entities.RoundEndReason;
 import dev.lordfetznschaedl.entities.Team;
@@ -14,7 +16,10 @@ import dev.lordfetznschaedl.entities.events.RoundFreezeEndEvent;
 import dev.lordfetznschaedl.entities.events.RoundStartEvent;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -24,6 +29,9 @@ import java.util.Set;
  * game rules entity ({@code m_totalRoundsPlayed}, {@code m_iRoundWinStatus}, {@code m_eRoundWinReason})
  * and the scores from the team entities. Starts come from the {@code round_poststart} and
  * {@code begin_new_match} events.
+ * <p>
+ * The players of each side are recorded when the freeze time ends (or, if that was missed, when the
+ * round ends). From that the halves are derived: a new half starts whenever most players swapped sides.
  * <p>
  * This module also maintains {@link ParserContext#currentRound()}, so it should be registered
  * before modules that emit round-related events.
@@ -42,6 +50,8 @@ public final class RoundModule implements ParserModule {
         RoundEndReason reason = RoundEndReason.UNKNOWN;
         int terroristScore;
         int counterTerroristScore;
+        List<Player> terrorists;
+        List<Player> counterTerrorists;
 
         Draft(int number, int startTick) {
             this.number = number;
@@ -83,6 +93,7 @@ public final class RoundModule implements ParserModule {
             case "round_freeze_end" -> {
                 if (current != null && current.freezeEndTick < 0) {
                     current.freezeEndTick = event.tick();
+                    recordSides(current, context);
                     context.emit(new RoundFreezeEndEvent(event.tick(), current.number));
                 }
             }
@@ -114,6 +125,9 @@ public final class RoundModule implements ParserModule {
             rounds.add(current);
         }
         current.endTick = context.tick();
+        if (current.terrorists == null) {
+            recordSides(current, context);
+        }
         current.winner = Team.fromNumber(context.gameRule("m_iRoundWinStatus") instanceof Number n ? n.intValue() : 0);
         current.reason = RoundEndReason.fromCode(context.gameRule("m_eRoundWinReason") instanceof Number n ? n.intValue() : 0);
         pendingEnd = current;
@@ -139,10 +153,98 @@ public final class RoundModule implements ParserModule {
         List<Round> result = new ArrayList<>();
         for (Draft d : rounds) {
             List<KillEvent> roundKills = kills.stream().filter(k -> k.round() == d.number).toList();
+            if (d.terrorists == null) {
+                recordSides(d, context); // unfinished last round of a cut-off demo
+            }
             result.add(new Round(d.number, d.startTick, d.freezeEndTick, d.endTick, d.winner, d.reason,
-                    d.terroristScore, d.counterTerroristScore, roundKills));
+                    d.terroristScore, d.counterTerroristScore, roundKills, d.terrorists, d.counterTerrorists));
         }
         context.match().rounds(result);
+        context.match().halves(halves(result));
+    }
+
+    private static void recordSides(Draft round, ParserContext context) {
+        List<Player> terrorists = new ArrayList<>();
+        List<Player> counterTerrorists = new ArrayList<>();
+        for (Entity controller : context.controllers()) {
+            switch (Team.fromNumber(controller.getInt("m_iTeamNum", 0))) {
+                case TERRORIST -> terrorists.add(context.player(controller));
+                case COUNTER_TERRORIST -> counterTerrorists.add(context.player(controller));
+                default -> {
+                }
+            }
+        }
+        round.terrorists = List.copyOf(terrorists);
+        round.counterTerrorists = List.copyOf(counterTerrorists);
+    }
+
+    /** Groups consecutive rounds into halves; a half ends where most players swapped sides. */
+    static List<MatchHalf> halves(List<Round> rounds) {
+        List<List<Round>> groups = new ArrayList<>();
+        Round previous = null;
+        for (Round round : rounds) {
+            if (previous == null || sidesSwapped(previous, round)) {
+                groups.add(new ArrayList<>());
+            }
+            groups.getLast().add(round);
+            previous = round;
+        }
+        List<MatchHalf> halves = new ArrayList<>();
+        for (List<Round> group : groups) {
+            halves.add(new MatchHalf(halves.size() + 1,
+                    group.getFirst().number(), group.getLast().number(),
+                    playersOfSide(group, Team.TERRORIST),
+                    playersOfSide(group, Team.COUNTER_TERRORIST),
+                    (int) group.stream().filter(r -> r.winner() == Team.TERRORIST).count(),
+                    (int) group.stream().filter(r -> r.winner() == Team.COUNTER_TERRORIST).count()));
+        }
+        return halves;
+    }
+
+    private static boolean sidesSwapped(Round before, Round after) {
+        Map<String, Team> sides = new HashMap<>();
+        before.terrorists().forEach(p -> sides.put(p.id(), Team.TERRORIST));
+        before.counterTerrorists().forEach(p -> sides.put(p.id(), Team.COUNTER_TERRORIST));
+        int common = 0;
+        int swapped = 0;
+        for (Team side : List.of(Team.TERRORIST, Team.COUNTER_TERRORIST)) {
+            for (Player p : after.players(side)) {
+                Team old = sides.get(p.id());
+                if (old != null) {
+                    common++;
+                    if (old != side) {
+                        swapped++;
+                    }
+                }
+            }
+        }
+        return common > 0 && swapped * 2 > common;
+    }
+
+    /**
+     * Players that played on {@code side} during the half. A player who changed teams within the half
+     * is assigned to the side they played most rounds on.
+     */
+    private static List<Player> playersOfSide(List<Round> half, Team side) {
+        Map<String, Player> players = new LinkedHashMap<>();
+        Map<String, int[]> roundsPerSide = new HashMap<>();
+        for (Round round : half) {
+            for (Team s : List.of(Team.TERRORIST, Team.COUNTER_TERRORIST)) {
+                for (Player p : round.players(s)) {
+                    players.putIfAbsent(p.id(), p);
+                    roundsPerSide.computeIfAbsent(p.id(), id -> new int[2])[s == Team.TERRORIST ? 0 : 1]++;
+                }
+            }
+        }
+        List<Player> result = new ArrayList<>();
+        for (Player p : players.values()) {
+            int[] counts = roundsPerSide.get(p.id());
+            Team majority = counts[0] >= counts[1] ? Team.TERRORIST : Team.COUNTER_TERRORIST;
+            if (majority == side) {
+                result.add(p);
+            }
+        }
+        return List.copyOf(result);
     }
 
     private boolean isLive(ParserContext context) {

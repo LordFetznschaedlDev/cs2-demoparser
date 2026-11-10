@@ -2,6 +2,7 @@ package dev.lordfetznschaedl.businesslogic.modules;
 
 import dev.lordfetznschaedl.entities.DemoInfo;
 import dev.lordfetznschaedl.entities.Match;
+import dev.lordfetznschaedl.entities.MatchHalf;
 import dev.lordfetznschaedl.entities.Player;
 import dev.lordfetznschaedl.entities.Round;
 import dev.lordfetznschaedl.entities.Scoreboard;
@@ -23,6 +24,7 @@ public final class MatchBuilder {
     private List<Player> players = List.of();
     private List<TeamResult> teams = List.of();
     private List<Round> rounds = List.of();
+    private List<MatchHalf> halves = List.of();
     private Scoreboard scoreboard = new Scoreboard(List.of());
     private final List<String> warnings = new ArrayList<>();
     private Duration parseDuration = Duration.ZERO;
@@ -60,6 +62,14 @@ public final class MatchBuilder {
         return rounds;
     }
 
+    public void halves(List<MatchHalf> halves) {
+        this.halves = List.copyOf(halves);
+    }
+
+    public List<MatchHalf> halves() {
+        return halves;
+    }
+
     public void scoreboard(Scoreboard scoreboard) {
         this.scoreboard = scoreboard;
     }
@@ -79,7 +89,7 @@ public final class MatchBuilder {
     public Match build() {
         List<GameEvent> timeline = new ArrayList<>(events);
         timeline.sort(Comparator.comparingInt(GameEvent::tick)); // stable: keeps emission order per tick
-        return new Match(info, players, teams, rounds, scoreboard, List.copyOf(timeline), List.copyOf(warnings),
+        return new Match(info, players, teams, rounds, halves, scoreboard, List.copyOf(timeline), List.copyOf(warnings),
                 parseDuration);
     }
 }

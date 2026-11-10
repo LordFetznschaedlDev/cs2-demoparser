@@ -7,6 +7,7 @@ import dev.lordfetznschaedl.businesslogic.modules.ParserModule;
 import dev.lordfetznschaedl.businesslogic.modules.WeaponFireModule;
 import dev.lordfetznschaedl.entities.BombSite;
 import dev.lordfetznschaedl.entities.Match;
+import dev.lordfetznschaedl.entities.MatchHalf;
 import dev.lordfetznschaedl.entities.Round;
 import dev.lordfetznschaedl.entities.ScoreboardEntry;
 import dev.lordfetznschaedl.entities.Team;
@@ -249,6 +250,52 @@ class DemoParserTest {
             // a thrower that disconnected before the detonation can not be resolved
             assertTrue(resolved >= ofType.size() * 0.95, type + ": " + resolved + "/" + ofType.size());
         }
+    }
+
+    @ParameterizedTest
+    @MethodSource("demos")
+    void halvesContainThePlayersOfEachSide(String demo) {
+        Match m = matches.get(demo);
+        List<MatchHalf> halves = m.halves();
+        assertEquals(2, halves.size()); // none of the test demos went to overtime
+        MatchHalf first = halves.get(0);
+        MatchHalf second = halves.get(1);
+        assertEquals(1, first.firstRound());
+        assertEquals(12, first.lastRound());
+        assertEquals(13, second.firstRound());
+        assertEquals(m.rounds().size(), second.lastRound());
+
+        for (MatchHalf half : halves) {
+            assertEquals(5, half.terrorists().size(), half::toString);
+            assertEquals(5, half.counterTerrorists().size(), half::toString);
+            assertEquals(half.roundCount(), half.terroristRoundsWon() + half.counterTerroristRoundsWon());
+        }
+        // the sides swap at halftime
+        assertEquals(ids(first.terrorists()), ids(second.counterTerrorists()));
+        assertEquals(ids(first.counterTerrorists()), ids(second.terrorists()));
+
+        for (TeamResult team : m.teams()) {
+            // teams are reported with the side they ended on, i.e. the opposite side in the first half
+            assertEquals(ids(team.players()), ids(second.players(team.side())));
+            assertEquals(ids(team.players()), ids(first.players(team.side().opponent())));
+            assertEquals(team.scoreFirstHalf(), first.roundsWon(team.side().opponent()));
+            assertEquals(team.scoreSecondHalf(), second.roundsWon(team.side()));
+        }
+        for (Round round : m.rounds()) {
+            MatchHalf half = m.halfOfRound(round.number()).orElseThrow();
+            assertEquals(ids(half.terrorists()), ids(round.terrorists()), () -> "round " + round.number());
+            assertEquals(ids(half.counterTerrorists()), ids(round.counterTerrorists()), () -> "round " + round.number());
+        }
+        for (KillEvent kill : m.kills()) {
+            if (kill.round() > 0) {
+                MatchHalf half = m.halfOfRound(kill.round()).orElseThrow();
+                assertEquals(kill.victimTeam(), half.sideOf(kill.victim()), kill::toString);
+            }
+        }
+    }
+
+    private static java.util.Set<String> ids(List<dev.lordfetznschaedl.entities.Player> players) {
+        return players.stream().map(dev.lordfetznschaedl.entities.Player::id).collect(Collectors.toSet());
     }
 
     // ---------------------------------------------------------------- modularity

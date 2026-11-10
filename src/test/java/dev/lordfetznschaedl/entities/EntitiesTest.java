@@ -58,7 +58,7 @@ class EntitiesTest {
         TeamResult t = new TeamResult(Team.TERRORIST, "Terrorists", 13, 8, 5, 0, List.of(ALICE));
         TeamResult ct = new TeamResult(Team.COUNTER_TERRORIST, "Counter-Terrorists", 9, 4, 5, 0, List.of(BOT));
         DemoInfo info = new DemoInfo("de_test", "", "", "", 0, 0, 64, 6400, Duration.ofSeconds(100));
-        Match match = new Match(info, List.of(ALICE, BOT), List.of(t, ct), List.of(),
+        Match match = new Match(info, List.of(ALICE, BOT), List.of(t, ct), List.of(), List.of(),
                 new Scoreboard(List.of()), List.of(), List.of(), Duration.ofMillis(1500));
 
         assertEquals(Duration.ofMillis(1500), match.parseDuration());
@@ -69,10 +69,27 @@ class EntitiesTest {
     }
 
     @Test
+    void halfAndRoundSides() {
+        MatchHalf half = new MatchHalf(3, 25, 27, List.of(ALICE), List.of(BOT), 2, 1);
+        assertTrue(half.isOvertime());
+        assertEquals(3, half.roundCount());
+        assertTrue(half.containsRound(27));
+        assertEquals(Team.TERRORIST, half.sideOf(ALICE));
+        assertEquals(Team.COUNTER_TERRORIST, half.sideOf(BOT));
+        assertEquals(Team.UNASSIGNED, half.sideOf(new Player(1, "other", false)));
+        assertEquals(2, half.roundsWon(Team.TERRORIST));
+
+        Round round = new Round(1, 0, 10, 20, Team.TERRORIST, RoundEndReason.TERRORISTS_WIN, 1, 0,
+                List.of(), List.of(BOT), List.of(ALICE));
+        assertEquals(Team.COUNTER_TERRORIST, round.sideOf(ALICE));
+        assertEquals(List.of(BOT), round.players(Team.TERRORIST));
+    }
+
+    @Test
     void drawHasNoWinner() {
         TeamResult t = new TeamResult(Team.TERRORIST, "T", 15, 0, 0, 0, List.of());
         TeamResult ct = new TeamResult(Team.COUNTER_TERRORIST, "CT", 15, 0, 0, 0, List.of());
-        Match match = new Match(null, List.of(), List.of(t, ct), List.of(), new Scoreboard(List.of()), List.of(), List.of(), Duration.ZERO);
+        Match match = new Match(null, List.of(), List.of(t, ct), List.of(), List.of(), new Scoreboard(List.of()), List.of(), List.of(), Duration.ZERO);
         assertTrue(match.winner().isEmpty());
     }
 }

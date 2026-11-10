@@ -30,6 +30,11 @@ for (Round round : match.rounds()) {
 
 List<KillEvent> headshots = match.kills().stream().filter(KillEvent::headshot).toList();
 List<GameEvent> round5 = match.eventsInRound(5);
+
+for (MatchHalf half : match.halves()) {
+    System.out.println("Half " + half.number() + " T: " + half.terrorists() + " CT: " + half.counterTerrorists());
+}
+Team side = match.halves().getFirst().sideOf(player);   // side of a player in the first half
 ```
 
 `parse` also accepts an `InputStream`. A `DemoParser` is immutable and thread safe, so one instance
@@ -42,7 +47,8 @@ can parse many demos, also in parallel.
 | `info`          | Map, server, build number, tick rate, number of ticks, playback duration                  |
 | `players`       | Everyone who played on T or CT (SteamID, name, bot flag)                                  |
 | `teams`         | Per side: name, total score, score per half and in overtime, players                      |
-| `rounds`        | Start / freeze end / end tick, winner, end reason, score after the round, the kills       |
+| `rounds`        | Start / freeze end / end tick, winner, end reason, score after the round, kills, players per side |
+| `halves`        | Each half (incl. overtime halves): its rounds, the players on T and CT, rounds won per side |
 | `scoreboard`    | K/D/A, headshots, damage, ADR, utility damage, flashed enemies, MVPs, score, 3k/4k/5k     |
 | `events`        | Timeline of typed events (`KillEvent`, `BombPlantedEvent`, `RoundEndEvent`, ...) by tick  |
 | `warnings`      | Problems that were skipped while parsing (empty for a healthy demo)                       |
@@ -67,7 +73,7 @@ DemoParser parser = DemoParser.builder()
 
 | Module                 | Default | Produces                                                                 |
 |------------------------|:-------:|--------------------------------------------------------------------------|
-| `RoundModule`          |   yes   | Match start/end, round start/freeze end/end, `Match.rounds`              |
+| `RoundModule`          |   yes   | Match start/end, round start/freeze end/end, `Match.rounds`, `Match.halves` |
 | `CombatModule`         |   yes   | Kills, damage (`PlayerHurtEvent`), flashes (`PlayerBlindEvent`)          |
 | `BombModule`           |   yes   | Plant/defuse (begin and done), explosion, bomb dropped / picked up       |
 | `GrenadeModule`        |   yes   | HE, flash, smoke, decoy detonations and molotov/incendiary fires         |
@@ -193,7 +199,11 @@ the default modules derive the match:
 - **Rounds** start at `round_poststart` (round 1 at `begin_new_match`, warmup is round 0). A round
   ends when the game rules' `m_totalRoundsPlayed` increases; winner and reason come from
   `m_iRoundWinStatus` / `m_eRoundWinReason`, the scores from the `CCSTeam` entities one tick later
-  (once the team entities have been updated).
+  (once the team entities have been updated). The players of each side are recorded when the
+  freeze time ends.
+- **Halves** are derived from the rounds: a new half starts where most players swapped sides,
+  so regulation and overtime halves are found without knowing the match format. A player who
+  changed teams within a half is listed on the side they played most rounds on.
 - **Scoreboard** values are the statistics the game networks per player controller
   (`m_pActionTrackingServices.*`, `m_iMVPs`, `m_iScore`). If a demo lacks them, they are counted
   from the kill and damage events instead.

@@ -15,6 +15,7 @@ import java.util.Optional;
  * @param players       all players that took part in the match
  * @param teams         final results of both teams (empty if no team data was found)
  * @param rounds        all rounds in order
+ * @param halves        the halves of the match (incl. overtime halves) with the players of each side
  * @param scoreboard    the end-of-match scoreboard
  * @param events        timeline of events, ordered by tick
  * @param warnings      problems that were encountered and skipped while parsing
@@ -25,6 +26,7 @@ public record Match(
         List<Player> players,
         List<TeamResult> teams,
         List<Round> rounds,
+        List<MatchHalf> halves,
         Scoreboard scoreboard,
         List<GameEvent> events,
         List<String> warnings,
@@ -65,6 +67,11 @@ public record Match(
         int t = team(Team.TERRORIST).map(TeamResult::score).orElse(0);
         int ct = team(Team.COUNTER_TERRORIST).map(TeamResult::score).orElse(0);
         return t + ":" + ct;
+    }
+
+    /** The half a round belongs to. */
+    public Optional<MatchHalf> halfOfRound(int round) {
+        return halves.stream().filter(h -> h.containsRound(round)).findFirst();
     }
 
     public Optional<Player> playerByName(String name) {
