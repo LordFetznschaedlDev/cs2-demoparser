@@ -59,8 +59,9 @@ class EntitiesTest {
         TeamResult ct = new TeamResult(Team.COUNTER_TERRORIST, "Counter-Terrorists", 9, 4, 5, 0, List.of(BOT));
         DemoInfo info = new DemoInfo("de_test", "", "", "", 0, 0, 64, 6400, Duration.ofSeconds(100));
         Match match = new Match(info, List.of(ALICE, BOT), List.of(t, ct), List.of(),
-                new Scoreboard(List.of()), List.of(), List.of());
+                new Scoreboard(List.of()), List.of(), List.of(), Duration.ofMillis(1500));
 
+        assertEquals(Duration.ofMillis(1500), match.parseDuration());
         assertEquals("13:9", match.finalScore());
         assertEquals(t, match.winner().orElseThrow());
         assertEquals(ALICE, match.playerByName("ALICE").orElseThrow());
@@ -71,7 +72,7 @@ class EntitiesTest {
     void drawHasNoWinner() {
         TeamResult t = new TeamResult(Team.TERRORIST, "T", 15, 0, 0, 0, List.of());
         TeamResult ct = new TeamResult(Team.COUNTER_TERRORIST, "CT", 15, 0, 0, 0, List.of());
-        Match match = new Match(null, List.of(), List.of(t, ct), List.of(), new Scoreboard(List.of()), List.of(), List.of());
+        Match match = new Match(null, List.of(), List.of(t, ct), List.of(), new Scoreboard(List.of()), List.of(), List.of(), Duration.ZERO);
         assertTrue(match.winner().isEmpty());
     }
 }

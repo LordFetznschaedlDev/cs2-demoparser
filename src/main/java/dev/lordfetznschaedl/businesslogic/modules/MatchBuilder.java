@@ -8,6 +8,7 @@ import dev.lordfetznschaedl.entities.Scoreboard;
 import dev.lordfetznschaedl.entities.TeamResult;
 import dev.lordfetznschaedl.entities.events.GameEvent;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,6 +25,7 @@ public final class MatchBuilder {
     private List<Round> rounds = List.of();
     private Scoreboard scoreboard = new Scoreboard(List.of());
     private final List<String> warnings = new ArrayList<>();
+    private Duration parseDuration = Duration.ZERO;
 
     public void addEvent(GameEvent event) {
         events.add(event);
@@ -70,9 +72,14 @@ public final class MatchBuilder {
         return warnings.size();
     }
 
+    public void parseDuration(Duration parseDuration) {
+        this.parseDuration = parseDuration;
+    }
+
     public Match build() {
         List<GameEvent> timeline = new ArrayList<>(events);
         timeline.sort(Comparator.comparingInt(GameEvent::tick)); // stable: keeps emission order per tick
-        return new Match(info, players, teams, rounds, scoreboard, List.copyOf(timeline), List.copyOf(warnings));
+        return new Match(info, players, teams, rounds, scoreboard, List.copyOf(timeline), List.copyOf(warnings),
+                parseDuration);
     }
 }

@@ -74,6 +74,7 @@ public final class DemoAnalyzer implements DemoVisitor, EntityListener {
     }
 
     public Match analyze(InputStream input) throws IOException {
+        long start = System.nanoTime();
         for (ParserModule module : modules) {
             module.onStart(context);
         }
@@ -85,6 +86,7 @@ public final class DemoAnalyzer implements DemoVisitor, EntityListener {
             match.addWarning(suppressedWarnings + " further warnings suppressed");
         }
         match.info(buildInfo());
+        match.parseDuration(Duration.ofNanos(System.nanoTime() - start));
         return match.build();
     }
 

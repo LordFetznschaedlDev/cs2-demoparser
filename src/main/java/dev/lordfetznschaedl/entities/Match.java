@@ -3,6 +3,7 @@ package dev.lordfetznschaedl.entities;
 import dev.lordfetznschaedl.entities.events.GameEvent;
 import dev.lordfetznschaedl.entities.events.KillEvent;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,13 +11,14 @@ import java.util.Optional;
  * Everything that was extracted from a demo: metadata, players, the final result, the rounds,
  * the scoreboard and a chronological timeline of all game events.
  *
- * @param info       demo metadata (map, tick rate, duration, ...)
- * @param players    all players that took part in the match
- * @param teams      final results of both teams (empty if no team data was found)
- * @param rounds     all rounds in order
- * @param scoreboard the end-of-match scoreboard
- * @param events     timeline of events, ordered by tick
- * @param warnings   problems that were encountered and skipped while parsing
+ * @param info          demo metadata (map, tick rate, duration, ...)
+ * @param players       all players that took part in the match
+ * @param teams         final results of both teams (empty if no team data was found)
+ * @param rounds        all rounds in order
+ * @param scoreboard    the end-of-match scoreboard
+ * @param events        timeline of events, ordered by tick
+ * @param warnings      problems that were encountered and skipped while parsing
+ * @param parseDuration how long the parser took to read and analyze the demo
  */
 public record Match(
         DemoInfo info,
@@ -25,7 +27,8 @@ public record Match(
         List<Round> rounds,
         Scoreboard scoreboard,
         List<GameEvent> events,
-        List<String> warnings) {
+        List<String> warnings,
+        Duration parseDuration) {
 
     public String mapName() {
         return info.mapName();

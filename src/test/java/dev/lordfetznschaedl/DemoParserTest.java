@@ -119,6 +119,8 @@ class DemoParserTest {
         assertEquals(64.0, m.info().tickRate());
         assertTrue(m.info().duration().toMinutes() > 20);
         assertTrue(m.info().totalTicks() > 0);
+        assertTrue(m.parseDuration().isPositive());
+        assertTrue(m.parseDuration().toMinutes() < 5, () -> "parsing took " + m.parseDuration());
     }
 
     @ParameterizedTest
