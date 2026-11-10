@@ -21,7 +21,10 @@ public final class Field {
         VARIABLE_TABLE
     }
 
-    final String name;
+    /** Property name; qualified with the send node if the plain name is not unique in its serializer. */
+    String name;
+    /** Path of the structure the field belongs to, e.g. {@code m_AttributeManager.m_Item}. */
+    String sendNode;
     final FieldType type;
     final String varType;
     final int bitCount;

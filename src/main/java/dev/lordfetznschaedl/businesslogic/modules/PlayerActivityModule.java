@@ -26,7 +26,7 @@ public final class PlayerActivityModule implements ParserModule {
                 // the event carries the identity itself; the controller may already be gone
                 long xuid = parseXuid(e.data().get("xuid"));
                 String name = e.getString("name");
-                Player player = name != null ? new Player(xuid, name, xuid == 0) : ctx.playerBySlot(e.getInt("userid", -1));
+                Player player = name != null ? ctx.player(xuid, name) : ctx.playerBySlot(e.getInt("userid", -1));
                 ctx.emit(new PlayerDisconnectEvent(e.tick(), ctx.currentRound(), player, e.getInt("reason", 0)));
             }
             default -> {

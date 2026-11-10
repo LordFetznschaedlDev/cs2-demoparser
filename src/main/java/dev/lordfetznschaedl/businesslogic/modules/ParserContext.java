@@ -3,10 +3,13 @@ package dev.lordfetznschaedl.businesslogic.modules;
 import dev.lordfetznschaedl.businesslogic.entitystate.Entity;
 import dev.lordfetznschaedl.businesslogic.entitystate.EntityManager;
 import dev.lordfetznschaedl.entities.Player;
+import dev.lordfetznschaedl.entities.Skin;
 import dev.lordfetznschaedl.entities.Team;
 import dev.lordfetznschaedl.entities.events.GameEvent;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,8 @@ public final class ParserContext {
     private final EntityManager entities;
     private final MatchBuilder match;
     private final Map<String, Player> players = new LinkedHashMap<>();
+    /** Skins per player id; every {@link Player} of that id gets a read-only view of the same list. */
+    private final Map<String, List<Skin>> skins = new HashMap<>();
     private int tick;
     private int currentRound;
 
@@ -154,18 +159,41 @@ public final class ParserContext {
 
     /** Builds (and registers) the {@link Player} for a controller entity. */
     public Player player(Entity controller) {
-        long steamId = controller.getLong("m_steamID", 0);
         String name = controller.getString("m_iszPlayerName");
-        if (name == null) {
-            name = "";
-        }
-        Player player = new Player(steamId, name, steamId == 0);
-        Player known = players.get(player.id());
-        if (known != null && known.equals(player)) {
+        return player(controller.getLong("m_steamID", 0), name == null ? "" : name);
+    }
+
+    /** Builds (and registers) the {@link Player} with the given identity; a SteamID of {@code 0} is a bot. */
+    public Player player(long steamId, String name) {
+        boolean bot = steamId == 0;
+        String id = bot ? "BOT:" + name : Long.toString(steamId);
+        Player known = players.get(id);
+        if (known != null && known.name().equals(name)) {
             return known;
         }
-        players.put(player.id(), player);
+        Player player = new Player(steamId, name, bot, Collections.unmodifiableList(skinList(id)));
+        players.put(id, player);
         return player;
+    }
+
+    /**
+     * Adds a skin to a player, or replaces the one with the same item id (e.g. with an updated StatTrak
+     * count). It shows up in {@link Player#skins()} of every instance of that player, including those
+     * already referenced by events.
+     */
+    public void putSkin(String playerId, Skin skin) {
+        List<Skin> list = skinList(playerId);
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).itemId() == skin.itemId()) {
+                list.set(i, skin);
+                return;
+            }
+        }
+        list.add(skin);
+    }
+
+    private List<Skin> skinList(String playerId) {
+        return skins.computeIfAbsent(playerId, k -> new ArrayList<>());
     }
 
     /** Players that were resolved so far, without spectators/recorders unless they were referenced. */

@@ -50,7 +50,7 @@ can parse many demos, also in parallel (see [Parallel parsing](#parallel-parsing
 | Property        | Content                                                                                   |
 |-----------------|-------------------------------------------------------------------------------------------|
 | `info`          | Map, server, build number, tick rate, number of ticks, playback duration                  |
-| `players`       | Everyone who played on T or CT (SteamID, name, bot flag)                                  |
+| `players`       | Everyone who played on T or CT (SteamID, name, bot flag, skins with the `SkinModule`)     |
 | `teams`         | Per side: name, total score, score per half and in overtime, players                      |
 | `rounds`        | Start / freeze end / end tick, winner, end reason, score after the round, kills, players per side |
 | `halves`        | Each half (incl. overtime halves): its rounds, the players on T and CT, rounds won per side |
@@ -72,6 +72,7 @@ DemoParser parser = DemoParser.builder()
         .module(WeaponFireModule::new)                          // every shot
         .module(PlayerPositionModule::new)                      // positions, 4 samples/s
         .module(() -> new PlayerPositionModule(1, true))         // ...or every tick, incl. warmup
+        .module(SkinModule::new)                                // skins in Player.skins()
         .module(() -> new GenericEventModule(Set.of("item_pickup")))
         .module(MyModule::new)                                  // your own
         .strict(true)                                           // fail instead of collecting warnings
@@ -88,6 +89,7 @@ DemoParser parser = DemoParser.builder()
 | `ScoreboardModule`     |   yes   | `Match.players`, `Match.teams`, `Match.scoreboard`                       |
 | `WeaponFireModule`     |   no    | `WeaponFireEvent` for every shot (thousands per demo)                    |
 | `PlayerPositionModule` |   no    | `PlayerPositionEvent`: position, view angles and health of every living player, sampled every 16 ticks by default (~60,000 per demo) |
+| `SkinModule`           |   no    | `Player.skins()`: weapon and knife skins and gloves of every player (paint kit, seed, wear, StatTrak, stickers, name tag, charm) |
 | `GenericEventModule`   |   no    | Raw `GenericGameEvent`s for all (or selected) game events                |
 
 A module implements `ParserModule` and overrides only the callbacks it needs:
@@ -112,6 +114,47 @@ class ClutchModule implements ParserModule {
 Modules are passed as suppliers because they keep per-demo state; a fresh instance is created for
 every parse. They are notified in the order they were added. `RoundModule` maintains
 `ParserContext.currentRound()`, so it should come before modules that tag events with a round.
+
+## Skins
+
+With the `SkinModule` every `Player` lists the cosmetic items they used in the match:
+
+```java
+Match match = DemoParser.builder().withDefaultModules().module(SkinModule::new).build().parse(demo);
+
+for (Player player : match.players()) {
+    for (Skin skin : player.skins()) {
+        System.out.printf("%s: %s paint kit %d, seed %d, wear %.4f (%s)%s%n",
+                player.name(), skin.itemName(), skin.paintKit(), skin.paintSeed(), skin.wear(), skin.exterior(),
+                skin.hasStatTrak() ? ", StatTrak " + skin.statTrak() : "");
+    }
+    List<Skin> knives = player.skins(Skin.Category.KNIFE);
+}
+```
+
+| `Skin` property       | Content                                                                     |
+|-----------------------|-----------------------------------------------------------------------------|
+| `itemDefinitionIndex` | What the item is (`7` = AK-47, `507` = Karambit, `5030` = Sport Gloves)     |
+| `itemName`, `category`| English name of the item and `WEAPON`, `KNIFE` or `GLOVES`                  |
+| `itemId`              | Unique id of the item in the owner's inventory                              |
+| `paintKit`            | The finish, e.g. `44` = Case Hardened; `0` for an item without one          |
+| `paintSeed`, `wear`   | Pattern seed and float value; `exterior()` gives Factory New ... Battle-Scarred |
+| `statTrak`            | StatTrak kill count, `-1` without StatTrak                                  |
+| `nameTag`             | Custom name or `null`                                                       |
+| `stickers`            | Slot, sticker id and scrape of every sticker                                |
+| `charmId`             | Attached charm, `0` if there is none                                        |
+
+Good to know:
+
+- **Ids, not names.** The demo only contains numeric ids. The names of paint kits, stickers and charms come
+  from the game's `items_game.txt` (or a community list based on it); the library only knows the names of
+  the weapons, knives and gloves.
+- **Owner, not user.** A skin is listed for the player whose inventory it comes from, also if a teammate
+  picked the weapon up.
+- **Only what appears in the match.** Items are read from the weapons in the game, so a skin of a weapon the
+  player never bought or picked up is unknown. Default items (no inventory item) are not listed.
+- Every `Player` instance of a parse, including those in events, shows the same skins. Equality of players
+  ignores the skins.
 
 ## Parallel parsing
 
@@ -312,3 +355,4 @@ missing, or with `mvn test -DexcludedGroups=local`.
 - Entity properties of rarely used types (e.g. `CTransform` vectors) are decoded on a best guess.
 - Chat messages and the economy per round are not extracted by the modules (the money values are
   available to custom modules through the entity state).
+- Agent skins and music kits are not extracted by the `SkinModule`.

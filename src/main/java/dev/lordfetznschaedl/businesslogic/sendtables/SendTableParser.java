@@ -20,7 +20,7 @@ public final class SendTableParser {
             "CBodyComponent", "CLightComponent", "CPhysicsComponent", "CRenderComponent", "CPlayerLocalData");
 
     private record RawField(int varTypeSym, int varNameSym, int bitCount, Float low, Float high, int encodeFlags,
-                            int serializerNameSym, int encoderSym, List<Integer> polymorphicSyms) {
+                            int serializerNameSym, int encoderSym, int sendNodeSym, List<Integer> polymorphicSyms) {
     }
 
     private SendTableParser() {
@@ -97,10 +97,32 @@ public final class SendTableParser {
                 }
                 fields.add(field);
             }
+            disambiguate(fields);
             String name = symbols.get(nameSym);
             serializers.put(name, new Serializer(name, version, List.copyOf(fields)));
         }
         return serializers;
+    }
+
+    /**
+     * Flattened serializers can contain two fields with the same name from different embedded
+     * structures, e.g. the {@code m_Attributes} of {@code m_AttributeList} and of
+     * {@code m_NetworkedDynamicAttributes} on every weapon. Their values would overwrite each other
+     * under one property name, so such fields are qualified with their send node
+     * (e.g. {@code m_AttributeManager.m_Item.m_AttributeList.m_Attributes}).
+     */
+    static void disambiguate(List<Field> fields) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (Field field : fields) {
+            counts.merge(field.name, 1, Integer::sum);
+        }
+        for (Field field : fields) {
+            // fields are shared between serializers, so a field can already be qualified
+            if (counts.get(field.name) > 1 && field.sendNode != null && !field.sendNode.isEmpty()
+                    && !field.name.startsWith(field.sendNode + ".")) {
+                field.name = field.sendNode + "." + field.name;
+            }
+        }
     }
 
     private static RawField readField(ProtoReader f) {
@@ -112,6 +134,7 @@ public final class SendTableParser {
         int flags = 0;
         int serializerName = -1;
         int encoder = -1;
+        int sendNode = -1;
         List<Integer> polymorphic = new ArrayList<>();
         while (f.next()) {
             switch (f.fieldNumber()) {
@@ -122,6 +145,7 @@ public final class SendTableParser {
                 case 5 -> high = f.readFloat();
                 case 6 -> flags = f.readInt32();
                 case 7 -> serializerName = f.readInt32();
+                case 9 -> sendNode = f.readInt32();
                 case 10 -> encoder = f.readInt32();
                 case 11 -> {
                     ProtoReader type = f.readMessage();
@@ -136,7 +160,7 @@ public final class SendTableParser {
                 default -> f.skip();
             }
         }
-        return new RawField(varType, varName, bitCount, low, high, flags, serializerName, encoder, polymorphic);
+        return new RawField(varType, varName, bitCount, low, high, flags, serializerName, encoder, sendNode, polymorphic);
     }
 
     private static Field createField(RawField raw, List<String> symbols, Map<String, Serializer> serializers) {
@@ -147,6 +171,7 @@ public final class SendTableParser {
                 raw.bitCount(), raw.low(), raw.high(), raw.encodeFlags(),
                 raw.encoderSym() >= 0 ? symbols.get(raw.encoderSym()) : null,
                 serializerName);
+        field.sendNode = raw.sendNodeSym() >= 0 ? symbols.get(raw.sendNodeSym()) : null;
 
         if (serializerName != null) {
             field.serializer = serializers.get(serializerName);
