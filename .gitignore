@@ -37,3 +37,5 @@ build/
 
 ### Mac OS ###
 .DS_Store
+### Test demos (too large for git, ~230 MB each) ###
+src/test/resources/demos/*.dem
