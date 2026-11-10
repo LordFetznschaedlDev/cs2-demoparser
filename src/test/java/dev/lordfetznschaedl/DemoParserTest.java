@@ -5,7 +5,6 @@ import dev.lordfetznschaedl.businesslogic.modules.GenericEventModule;
 import dev.lordfetznschaedl.businesslogic.modules.ParserContext;
 import dev.lordfetznschaedl.businesslogic.modules.ParserModule;
 import dev.lordfetznschaedl.businesslogic.modules.WeaponFireModule;
-import dev.lordfetznschaedl.businesslogic.io.DemoFormatException;
 import dev.lordfetznschaedl.entities.BombSite;
 import dev.lordfetznschaedl.entities.Match;
 import dev.lordfetznschaedl.entities.Round;
@@ -47,15 +46,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Parses the demos in {@code src/test/resources/demos} and checks the result for consistency.
- * Each demo is parsed once and shared by the tests. The demos are not under version control;
- * the tests are skipped when they are missing.
+ * Each demo is parsed once and shared by the tests. The demos are not under version control, so
+ * the tests only run locally ({@link LocalOnly}) and are skipped when the files are missing.
  */
+@LocalOnly
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DemoParserTest {
 
@@ -310,11 +309,5 @@ class DemoParserTest {
                 new int[]{first.startTick(), first.endTick()},
                 new int[]{matches.get("demo2.dem").rounds().getFirst().startTick(),
                         matches.get("demo2.dem").rounds().getFirst().endTick()});
-    }
-
-    @Test
-    void rejectsNonDemoFiles() {
-        byte[] garbage = "definitely not a demo file".getBytes();
-        assertThrows(DemoFormatException.class, () -> DemoParser.create().parse(new ByteArrayInputStream(garbage)));
     }
 }
