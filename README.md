@@ -9,7 +9,7 @@ of what happened when.
 - A full matchmaking demo parses in roughly 2–3 seconds
 - Modular: what is extracted is defined by pluggable modules, and you can add your own
 
-> [!WARNING]
+> [!WARNING] 
 > **This demo parser has been fully created by AI.** The code, tests and documentation were written by
 > an AI model (Claude). They were checked against a small set of test demos, but have not been
 > reviewed line by line by a human. Validate the results for your use case before relying on them.
