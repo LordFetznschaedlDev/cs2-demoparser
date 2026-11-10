@@ -31,6 +31,12 @@ class DemoParserInputTest {
     }
 
     @Test
+    void positionModuleRejectsInvalidInterval() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new dev.lordfetznschaedl.businesslogic.modules.PlayerPositionModule(0, false));
+    }
+
+    @Test
     void rejectsEmptyInput() {
         assertThrows(java.io.EOFException.class, () -> DemoParser.create().parse(new ByteArrayInputStream(new byte[0])));
     }

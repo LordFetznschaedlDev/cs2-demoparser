@@ -65,6 +65,8 @@ Every event implements `GameEvent` and knows its `tick()` and `round()` (`0` = w
 DemoParser parser = DemoParser.builder()
         .withDefaultModules()
         .module(WeaponFireModule::new)                          // every shot
+        .module(PlayerPositionModule::new)                      // positions, 4 samples/s
+        .module(() -> new PlayerPositionModule(1, true))         // ...or every tick, incl. warmup
         .module(() -> new GenericEventModule(Set.of("item_pickup")))
         .module(MyModule::new)                                  // your own
         .strict(true)                                           // fail instead of collecting warnings
@@ -80,6 +82,7 @@ DemoParser parser = DemoParser.builder()
 | `PlayerActivityModule` |   yes   | Team changes, disconnects                                                |
 | `ScoreboardModule`     |   yes   | `Match.players`, `Match.teams`, `Match.scoreboard`                       |
 | `WeaponFireModule`     |   no    | `WeaponFireEvent` for every shot (thousands per demo)                    |
+| `PlayerPositionModule` |   no    | `PlayerPositionEvent`: position, view angles and health of every living player, sampled every 16 ticks by default (~60,000 per demo) |
 | `GenericEventModule`   |   no    | Raw `GenericGameEvent`s for all (or selected) game events                |
 
 A module implements `ParserModule` and overrides only the callbacks it needs:
@@ -209,6 +212,8 @@ the default modules derive the match:
   from the kill and damage events instead.
 - **Bomb sites** come as the entity index of the site's trigger; the trigger's bounds are matched
   against the A/B site centers of `CCSPlayerResource`.
+- **Positions** are networked as a grid cell plus an offset within it: the world coordinate is
+  `CBodyComponent.m_cellX * 512 - 16384 + CBodyComponent.m_vecX` (same for Y and Z).
 - **Molotov fires** reference the fire entity, which is created right after the event; its owner
   is the thrower, so the event is emitted once that entity exists.
 
@@ -251,5 +256,5 @@ missing, or with `mvn test -DexcludedGroups=local`.
 
 - Supports CS2 (Source 2) demos only, not CS:GO demos.
 - Entity properties of rarely used types (e.g. `CTransform` vectors) are decoded on a best guess.
-- Chat messages, economy per round and player positions over time are not extracted by the default
-  modules (positions are available to custom modules through the entity state).
+- Chat messages and the economy per round are not extracted by the modules (the money values are
+  available to custom modules through the entity state).
