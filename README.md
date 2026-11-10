@@ -43,7 +43,7 @@ Team side = match.halves().getFirst().sideOf(player);   // side of a player in t
 ```
 
 `parse` also accepts an `InputStream`. A `DemoParser` is immutable and thread safe, so one instance
-can parse many demos, also in parallel.
+can parse many demos, also in parallel (see [Parallel parsing](#parallel-parsing)).
 
 ## The `Match` entity
 
@@ -112,6 +112,55 @@ class ClutchModule implements ParserModule {
 Modules are passed as suppliers because they keep per-demo state; a fresh instance is created for
 every parse. They are notified in the order they were added. `RoundModule` maintains
 `ParserContext.currentRound()`, so it should come before modules that tag events with a round.
+
+## Parallel parsing
+
+The parser has no parallel mode of its own, but it is safe to parse **several demos at the same time**
+with one shared `DemoParser`:
+
+```java
+DemoParser parser = DemoParser.create();   // one instance for all threads
+
+List<Match> matches = demoFiles.parallelStream()
+        .map(parser::parseUnchecked)       // UncheckedIOException instead of IOException
+        .toList();
+
+// or with an executor, e.g. to limit the number of threads
+try (ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
+    List<Future<Match>> futures = demoFiles.stream()
+            .map(file -> pool.submit(() -> parser.parse(file)))
+            .toList();
+    for (Future<Match> future : futures) {
+        Match match = future.get();
+        // ...
+    }
+}
+```
+
+Why this is safe:
+
+- `DemoParser` only holds the module suppliers and the strict flag and never changes after `build()`.
+- Every `parse` call creates its own analyzer with its own entity state, string tables and event decoder,
+  plus fresh module instances from the suppliers.
+- The library has no mutable static state.
+- The returned `Match` is immutable and can be read from any thread.
+
+A **single demo is always parsed on one thread**. A demo is one sequential bit stream and every entity
+update is a delta on top of the previous state, so it can not be split and decoded from the middle.
+
+Things to keep in mind:
+
+- **Module suppliers must create new instances.** `.module(MyModule::new)` is fine; a supplier that returns
+  the same object every time (`.module(() -> sharedModule)`) shares that module between parallel parses,
+  so it would have to be thread safe.
+- **CPU:** parsing is CPU-bound, so throughput tops out at about one demo per core. For many demos use a
+  pool sized to the number of cores rather than one thread per demo.
+- **Memory:** each running parse holds a complete entity state and its growing event list (tens of MB per
+  demo, more with `PlayerPositionModule` or `WeaponFireModule`). Raise the heap (`-Xmx`) when parsing
+  many demos at once.
+
+Measured with the three test demos on a 16-core machine: 7.5 s one after another, 2.7 s in parallel. The
+parallel run takes about as long as the slowest single demo, and the results are identical.
 
 ## How the parser works
 
